@@ -9,5 +9,10 @@ apt install golang git -y
 ```
 安装go环境，没有包的话请自行手动安装go环境。
 ```shell
-git clone 
+git clone https://github.com/xkatld/filewm.git
+cd filewm
+chmod 777 filewm.go
+go run filewm.go
 ```
+默认设置80端口，没有设置访问密码，先设置访问密码再切换是否启用密码进入。
+![image](https://github.com/user-attachments/assets/232f6bfe-157a-44c6-832c-ce238769c1f9)
