@@ -20,4 +20,5 @@ go run filewm.go
 	fmt.Println("Server is running on http://localhost:38500")
 	log.Fatal(http.ListenAndServe(":38500", nil))
 ```
-![image](https://github.com/user-attachments/assets/232f6bfe-157a-44c6-832c-ce238769c1f9)
+![image](https://github.com/user-attachments/assets/84cd60d9-4b0a-494c-ae2d-80de237865f7)
+
