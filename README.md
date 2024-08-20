@@ -15,7 +15,8 @@ chmod 777 filewm.go
 go run filewm.go
 ```
 默认设置38500端口，没有设置访问密码，先设置访问密码再切换是否启用密码进入。
-修改端口：
+
+修改端口请修改filewm.go文件：
 ```
 	fmt.Println("Server is running on http://localhost:38500")
 	log.Fatal(http.ListenAndServe(":38500", nil))
