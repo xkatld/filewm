@@ -1,3 +1,4 @@
+</html>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -99,7 +100,7 @@
             <input type="text" id="folder-name" placeholder="新文件夹名称">
             <button type="button" onclick="createFolder()">创建文件夹</button>
         </form>
-        <h2>文件列表：</h2>
+        <h2>当前目录内容：</h2>
         <ul id="file-list"></ul>
         <h2>密码保护：</h2>
         <form id="password-form">
@@ -138,20 +139,20 @@
                         const li = document.createElement('li');
                         if (file.isDir) {
                             li.innerHTML = `
-                                <strong>📁 <a href="#" onclick="changePath('${file.path}')">${file.name}</a></strong>
+                                <strong>📁 <a href="#" onclick="changePath('${currentPath}/${file.name}')">${file.name}</a></strong>
                                 <div>
-                                    <input type="text" id="new-name-${file.path}" placeholder="新名称">
-                                    <button onclick="renameFile('${file.path}')">重命名</button>
-                                    <button onclick="deleteFile('${file.path}')">删除</button>
+                                    <input type="text" id="new-name-${file.name}" placeholder="新名称">
+                                    <button onclick="renameFile('${file.name}')">重命名</button>
+                                    <button onclick="deleteFile('${file.name}')">删除</button>
                                 </div>
                             `;
                         } else {
                             li.innerHTML = `
-                                <a href="/files/${file.path}" target="_blank">${file.name}</a>
+                                <a href="/files${currentPath}/${file.name}" target="_blank">${file.name}</a>
                                 <div>
-                                    <input type="text" id="new-name-${file.path}" placeholder="新名称">
-                                    <button onclick="renameFile('${file.path}')">重命名</button>
-                                    <button onclick="deleteFile('${file.path}')">删除</button>
+                                    <input type="text" id="new-name-${file.name}" placeholder="新名称">
+                                    <button onclick="renameFile('${file.name}')">重命名</button>
+                                    <button onclick="deleteFile('${file.name}')">删除</button>
                                 </div>
                             `;
                         }
@@ -177,6 +178,7 @@
             xhr.onload = function() {
                 if (xhr.status === 200) {
                     listFiles();
+                    document.getElementById('progress-bar').style.display = 'none';
                 } else {
                     alert('Upload failed. Please try again.');
                 }
@@ -184,19 +186,18 @@
             xhr.send(formData);
         });
 
-        function renameFile(oldPath) {
-            var newName = document.getElementById('new-name-' + oldPath).value;
+        function renameFile(oldName) {
+            var newName = document.getElementById('new-name-' + oldName).value;
             if (!newName) {
                 alert('Please enter a new name');
                 return;
             }
-            var newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName;
             fetch('/rename', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({oldPath: oldPath, newPath: newPath}),
+                body: JSON.stringify({oldPath: `${currentPath}/${oldName}`, newPath: `${currentPath}/${newName}`}),
             })
             .then(response => response.json())
             .then(data => {
@@ -253,14 +254,14 @@
             });
         }
 
-        function deleteFile(path) {
+        function deleteFile(name) {
             if (confirm('确定要删除这个文件/文件夹吗？')) {
                 fetch('/delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({path: path}),
+                    body: JSON.stringify({path: `${currentPath}/${name}`}),
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -288,7 +289,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({path: currentPath + '/' + folderName}),
+                body: JSON.stringify({path: `${currentPath}/${folderName}`}),
             })
             .then(response => response.json())
             .then(data => {
