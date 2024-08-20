@@ -1,44 +1,52 @@
-</html>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>企业文件管理器</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Roboto', sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f4f4f4;
         }
         .container {
             background-color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         h1, h2 {
             color: #2c3e50;
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
+            margin-top: 0;
         }
         form {
             margin-bottom: 20px;
         }
         input[type="file"], input[type="text"], input[type="password"] {
             margin-right: 10px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
         }
         input[type="submit"], button {
             background-color: #3498db;
             color: #fff;
             border: none;
-            padding: 5px 10px;
+            padding: 10px 15px;
             cursor: pointer;
-            border-radius: 3px;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: background-color 0.3s;
         }
         input[type="submit"]:hover, button:hover {
             background-color: #2980b9;
@@ -48,13 +56,17 @@
             padding: 0;
         }
         li {
-            background-color: #ecf0f1;
-            margin-bottom: 5px;
-            padding: 10px;
-            border-radius: 3px;
+            background-color: #f8f9fa;
+            margin-bottom: 8px;
+            padding: 12px;
+            border-radius: 4px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: background-color 0.3s;
+        }
+        li:hover {
+            background-color: #e9ecef;
         }
         a {
             color: #2980b9;
@@ -69,6 +81,7 @@
             padding: 3px;
             border-radius: 3px;
             box-shadow: inset 0 1px 3px rgba(0, 0, 0, .2);
+            margin-top: 10px;
         }
         #progress-bar-fill {
             display: block;
@@ -78,10 +91,27 @@
             transition: width 500ms ease-in-out;
         }
         .breadcrumb {
-            margin-bottom: 10px;
+            margin-bottom: 20px;
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
         }
         .breadcrumb a {
             margin-right: 5px;
+        }
+        .file-icon {
+            margin-right: 10px;
+        }
+        .custom-file-upload {
+            border: 1px solid #ccc;
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        #file-input {
+            display: none;
         }
     </style>
 </head>
@@ -90,6 +120,9 @@
         <h1>企业文件管理器</h1>
         <div class="breadcrumb" id="breadcrumb"></div>
         <form id="upload-form" enctype="multipart/form-data">
+            <label for="file-input" class="custom-file-upload">
+                <i class="fas fa-cloud-upload-alt"></i> 选择文件
+            </label>
             <input type="file" name="file" id="file-input">
             <input type="submit" value="上传文件">
         </form>
@@ -98,23 +131,23 @@
         </div>
         <form id="create-folder-form">
             <input type="text" id="folder-name" placeholder="新文件夹名称">
-            <button type="button" onclick="createFolder()">创建文件夹</button>
+            <button type="button" onclick="createFolder()"><i class="fas fa-folder-plus"></i> 创建文件夹</button>
         </form>
         <h2>当前目录内容：</h2>
         <ul id="file-list"></ul>
         <h2>密码保护：</h2>
         <form id="password-form">
             <input type="password" id="password" placeholder="设置新密码">
-            <button type="button" onclick="setPassword()">设置密码</button>
+            <button type="button" onclick="setPassword()"><i class="fas fa-key"></i> 设置密码</button>
         </form>
-        <button onclick="toggleProtection()">切换密码保护</button>
+        <button onclick="toggleProtection()"><i class="fas fa-shield-alt"></i> 切换密码保护</button>
     </div>
     <script>
         let currentPath = '';
 
         function updateBreadcrumb() {
             const parts = currentPath.split('/').filter(p => p);
-            let html = '<a href="#" onclick="changePath(\'\')">根目录</a>';
+            let html = '<a href="#" onclick="changePath(\'\')"><i class="fas fa-home"></i> 根目录</a>';
             let path = '';
             for (const part of parts) {
                 path += '/' + part;
@@ -139,20 +172,26 @@
                         const li = document.createElement('li');
                         if (file.isDir) {
                             li.innerHTML = `
-                                <strong>📁 <a href="#" onclick="changePath('${currentPath}/${file.name}')">${file.name}</a></strong>
+                                <div>
+                                    <i class="fas fa-folder file-icon"></i>
+                                    <a href="#" onclick="changePath('${currentPath}/${file.name}')">${file.name}</a>
+                                </div>
                                 <div>
                                     <input type="text" id="new-name-${file.name}" placeholder="新名称">
-                                    <button onclick="renameFile('${file.name}')">重命名</button>
-                                    <button onclick="deleteFile('${file.name}')">删除</button>
+                                    <button onclick="renameFile('${file.name}')"><i class="fas fa-edit"></i></button>
+                                    <button onclick="deleteFile('${file.name}')"><i class="fas fa-trash-alt"></i></button>
                                 </div>
                             `;
                         } else {
                             li.innerHTML = `
-                                <a href="/files${currentPath}/${file.name}" target="_blank">${file.name}</a>
+                                <div>
+                                    <i class="fas fa-file file-icon"></i>
+                                    <a href="/files${currentPath}/${file.name}" target="_blank">${file.name}</a>
+                                </div>
                                 <div>
                                     <input type="text" id="new-name-${file.name}" placeholder="新名称">
-                                    <button onclick="renameFile('${file.name}')">重命名</button>
-                                    <button onclick="deleteFile('${file.name}')">删除</button>
+                                    <button onclick="renameFile('${file.name}')"><i class="fas fa-edit"></i></button>
+                                    <button onclick="deleteFile('${file.name}')"><i class="fas fa-trash-alt"></i></button>
                                 </div>
                             `;
                         }
@@ -308,6 +347,12 @@
         // 初始化
         updateBreadcrumb();
         listFiles();
+
+        // 显示选择的文件名
+        document.getElementById('file-input').addEventListener('change', function() {
+            var fileName = this.files[0].name;
+            document.querySelector('.custom-file-upload').innerHTML = '<i class="fas fa-file"></i> ' + fileName;
+        });
     </script>
 </body>
 </html>
