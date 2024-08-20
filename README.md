@@ -15,4 +15,9 @@ chmod 777 filewm.go
 go run filewm.go
 ```
 默认设置80端口，没有设置访问密码，先设置访问密码再切换是否启用密码进入。
+修改端口：
+```
+	fmt.Println("Server is running on http://localhost:80")
+	log.Fatal(http.ListenAndServe(":38500", nil))
+```
 ![image](https://github.com/user-attachments/assets/232f6bfe-157a-44c6-832c-ce238769c1f9)
