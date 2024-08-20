@@ -40,8 +40,8 @@ func main() {
 	http.HandleFunc("/toggle-protection", toggleProtectionHandler)
 	http.HandleFunc("/list", authMiddleware(listHandler))
 
-	fmt.Println("Server is running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Server is running on http://localhost:38500")
+	log.Fatal(http.ListenAndServe(":38500", nil))
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
