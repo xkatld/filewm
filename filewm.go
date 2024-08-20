@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,11 @@ var (
 	passwordLock sync.RWMutex
 	isProtected  bool
 )
+
+type FileInfo struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+}
 
 func main() {
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
@@ -34,8 +40,8 @@ func main() {
 	http.HandleFunc("/toggle-protection", toggleProtectionHandler)
 	http.HandleFunc("/list", authMiddleware(listHandler))
 
-	fmt.Println("Server is running on http://localhost:80")
-	log.Fatal(http.ListenAndServe(":80", nil))
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -75,7 +81,13 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	dir := r.FormValue("dir")
-	filename := filepath.Join(uploadDir, dir, header.Filename)
+	fullPath := filepath.Join(uploadDir, dir)
+	if err := os.MkdirAll(fullPath, os.ModePerm); err != nil {
+		http.Error(w, "Error creating directory: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	filename := filepath.Join(fullPath, header.Filename)
 	out, err := os.Create(filename)
 	if err != nil {
 		http.Error(w, "Error creating file: "+err.Error(), http.StatusInternalServerError)
@@ -215,40 +227,23 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 }
 
-type FileInfo struct {
-	Name  string `json:"name"`
-	Path  string `json:"path"`
-	IsDir bool   `json:"isDir"`
-}
-
 func listHandler(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
-	files, err := getFileList(dir)
+	fullPath := filepath.Join(uploadDir, dir)
+	files, err := ioutil.ReadDir(fullPath)
 	if err != nil {
-		http.Error(w, "Error getting file list: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error reading directory: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
-}
+	var fileInfos []FileInfo
+	for _, file := range files {
+		fileInfos = append(fileInfos, FileInfo{
+			Name:  file.Name(),
+			IsDir: file.IsDir(),
+		})
+	}
 
-func getFileList(dir string) ([]FileInfo, error) {
-	var files []FileInfo
-	fullPath := filepath.Join(uploadDir, dir)
-	err := filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, _ := filepath.Rel(uploadDir, path)
-		if relPath != "." {
-			files = append(files, FileInfo{
-				Name:  info.Name(),
-				Path:  relPath,
-				IsDir: info.IsDir(),
-			})
-		}
-		return nil
-	})
-	return files, err
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(fileInfos)
 }
