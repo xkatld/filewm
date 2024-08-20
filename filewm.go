@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -33,9 +32,10 @@ func main() {
 	http.HandleFunc("/create-folder", authMiddleware(createFolderHandler))
 	http.HandleFunc("/set-password", setPasswordHandler)
 	http.HandleFunc("/toggle-protection", toggleProtectionHandler)
+	http.HandleFunc("/list", authMiddleware(listHandler))
 
-	fmt.Println("Server is running on http://localhost:80")
-	log.Fatal(http.ListenAndServe(":80", nil))
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -58,287 +58,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	files, err := getFileList("")
-	if err != nil {
-		http.Error(w, "Error getting file list: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl := `
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企业文件管理器</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        .container {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        h1, h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
-        }
-        form {
-            margin-bottom: 20px;
-        }
-        input[type="file"], input[type="text"], input[type="password"] {
-            margin-right: 10px;
-        }
-        input[type="submit"], button {
-            background-color: #3498db;
-            color: #fff;
-            border: none;
-            padding: 5px 10px;
-            cursor: pointer;
-            border-radius: 3px;
-        }
-        input[type="submit"]:hover, button:hover {
-            background-color: #2980b9;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            background-color: #ecf0f1;
-            margin-bottom: 5px;
-            padding: 10px;
-            border-radius: 3px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        a {
-            color: #2980b9;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        #progress-bar {
-            width: 100%;
-            background-color: #f0f0f0;
-            padding: 3px;
-            border-radius: 3px;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, .2);
-        }
-        #progress-bar-fill {
-            display: block;
-            height: 22px;
-            background-color: #3498db;
-            border-radius: 3px;
-            transition: width 500ms ease-in-out;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>企业文件管理器</h1>
-        <form id="upload-form" enctype="multipart/form-data">
-            <input type="file" name="file" id="file-input">
-            <input type="submit" value="上传文件">
-        </form>
-        <div id="progress-bar" style="display:none;">
-            <span id="progress-bar-fill" style="width: 0%"></span>
-        </div>
-        <form id="create-folder-form">
-            <input type="text" id="folder-name" placeholder="新文件夹名称">
-            <button type="button" onclick="createFolder()">创建文件夹</button>
-        </form>
-        <h2>文件列表：</h2>
-        <ul id="file-list">
-        {{range .}}
-            <li>
-                {{if .IsDir}}
-                    <strong>📁 {{.Name}}</strong>
-                {{else}}
-                    <a href="/files/{{.Path}}">{{.Name}}</a>
-                {{end}}
-                <div>
-                    <input type="text" id="new-name-{{.Path}}" placeholder="新名称">
-                    <button onclick="renameFile('{{.Path}}')">重命名</button>
-                    <button onclick="deleteFile('{{.Path}}')">删除</button>
-                </div>
-            </li>
-        {{else}}
-            <li>暂无文件</li>
-        {{end}}
-        </ul>
-        <h2>密码保护：</h2>
-        <form id="password-form">
-            <input type="password" id="password" placeholder="设置新密码">
-            <button type="button" onclick="setPassword()">设置密码</button>
-        </form>
-        <button onclick="toggleProtection()">切换密码保护</button>
-    </div>
-    <script>
-        document.getElementById('upload-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            var formData = new FormData(this);
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-            xhr.upload.onprogress = function(e) {
-                if (e.lengthComputable) {
-                    var percentComplete = (e.loaded / e.total) * 100;
-                    document.getElementById('progress-bar').style.display = 'block';
-                    document.getElementById('progress-bar-fill').style.width = percentComplete + '%';
-                }
-            };
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    location.reload();
-                } else {
-                    alert('Upload failed. Please try again.');
-                }
-            };
-            xhr.send(formData);
-        });
-
-        function renameFile(oldPath) {
-            var newName = document.getElementById('new-name-' + oldPath).value;
-            if (!newName) {
-                alert('Please enter a new name');
-                return;
-            }
-            fetch('/rename', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({oldName: oldPath, newName: newName}),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Rename failed: ' + data.error);
-                }
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('An error occurred while renaming the file');
-            });
-        }
-
-        function setPassword() {
-            var password = document.getElementById('password').value;
-            fetch('/set-password', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({password: password}),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Password set successfully');
-                } else {
-                    alert('Failed to set password: ' + data.error);
-                }
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('An error occurred while setting the password');
-            });
-        }
-
-        function toggleProtection() {
-            fetch('/toggle-protection', {
-                method: 'POST',
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Password protection ' + (data.isProtected ? 'enabled' : 'disabled'));
-                } else {
-                    alert('Failed to toggle protection: ' + data.error);
-                }
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('An error occurred while toggling protection');
-            });
-        }
-
-        function deleteFile(path) {
-            if (confirm('确定要删除这个文件/文件夹吗？')) {
-                fetch('/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({path: path}),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        alert('删除失败: ' + data.error);
-                    }
-                })
-                .catch((error) => {
-                    console.error('Error:', error);
-                    alert('删除文件/文件夹时发生错误');
-                });
-            }
-        }
-
-        function createFolder() {
-            var folderName = document.getElementById('folder-name').value;
-            if (!folderName) {
-                alert('请输入文件夹名称');
-                return;
-            }
-            fetch('/create-folder', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({name: folderName}),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('创建文件夹失败: ' + data.error);
-                }
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('创建文件夹时发生错误');
-            });
-        }
-    </script>
-</body>
-</html>
-`
-
-	t, err := template.New("index").Parse(tmpl)
-	if err != nil {
-		http.Error(w, "Error parsing template: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := t.Execute(w, files); err != nil {
-		http.Error(w, "Error executing template: "+err.Error(), http.StatusInternalServerError)
-	}
+	http.ServeFile(w, r, "index.html")
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +74,8 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	filename := filepath.Join(uploadDir, header.Filename)
+	dir := r.FormValue("dir")
+	filename := filepath.Join(uploadDir, dir, header.Filename)
 	out, err := os.Create(filename)
 	if err != nil {
 		http.Error(w, "Error creating file: "+err.Error(), http.StatusInternalServerError)
@@ -372,7 +93,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func fileHandler(w http.ResponseWriter, r *http.Request) {
-	filename := filepath.Join(uploadDir, filepath.Base(r.URL.Path))
+	filename := filepath.Join(uploadDir, r.URL.Path[7:])
 	http.ServeFile(w, r, filename)
 }
 
@@ -383,8 +104,8 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var renameRequest struct {
-		OldName string `json:"oldName"`
-		NewName string `json:"newName"`
+		OldPath string `json:"oldPath"`
+		NewPath string `json:"newPath"`
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&renameRequest)
@@ -393,8 +114,8 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldPath := filepath.Join(uploadDir, renameRequest.OldName)
-	newPath := filepath.Join(uploadDir, renameRequest.NewName)
+	oldPath := filepath.Join(uploadDir, renameRequest.OldPath)
+	newPath := filepath.Join(uploadDir, renameRequest.NewPath)
 
 	err = os.Rename(oldPath, newPath)
 	if err != nil {
@@ -475,7 +196,7 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var folderRequest struct {
-		Name string `json:"name"`
+		Path string `json:"path"`
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&folderRequest)
@@ -484,7 +205,7 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folderPath := filepath.Join(uploadDir, folderRequest.Name)
+	folderPath := filepath.Join(uploadDir, folderRequest.Path)
 	err = os.MkdirAll(folderPath, os.ModePerm)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
@@ -495,9 +216,21 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type FileInfo struct {
-	Name  string
-	Path  string
-	IsDir bool
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	IsDir bool   `json:"isDir"`
+}
+
+func listHandler(w http.ResponseWriter, r *http.Request) {
+	dir := r.URL.Query().Get("dir")
+	files, err := getFileList(dir)
+	if err != nil {
+		http.Error(w, "Error getting file list: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
 }
 
 func getFileList(dir string) ([]FileInfo, error) {
