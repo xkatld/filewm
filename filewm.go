@@ -29,6 +29,8 @@ func main() {
 	http.HandleFunc("/upload", authMiddleware(uploadHandler))
 	http.HandleFunc("/files/", authMiddleware(fileHandler))
 	http.HandleFunc("/rename", authMiddleware(renameHandler))
+	http.HandleFunc("/delete", authMiddleware(deleteHandler))
+	http.HandleFunc("/create-folder", authMiddleware(createFolderHandler))
 	http.HandleFunc("/set-password", setPasswordHandler)
 	http.HandleFunc("/toggle-protection", toggleProtectionHandler)
 
@@ -56,7 +58,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	files, err := getFileList()
+	files, err := getFileList("")
 	if err != nil {
 		http.Error(w, "Error getting file list: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -153,14 +155,23 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         <div id="progress-bar" style="display:none;">
             <span id="progress-bar-fill" style="width: 0%"></span>
         </div>
+        <form id="create-folder-form">
+            <input type="text" id="folder-name" placeholder="新文件夹名称">
+            <button type="button" onclick="createFolder()">创建文件夹</button>
+        </form>
         <h2>文件列表：</h2>
         <ul id="file-list">
         {{range .}}
             <li>
-                <a href="/files/{{.}}">{{.}}</a>
+                {{if .IsDir}}
+                    <strong>📁 {{.Name}}</strong>
+                {{else}}
+                    <a href="/files/{{.Path}}">{{.Name}}</a>
+                {{end}}
                 <div>
-                    <input type="text" id="new-name-{{.}}" placeholder="新文件名">
-                    <button onclick="renameFile('{{.}}')">重命名</button>
+                    <input type="text" id="new-name-{{.Path}}" placeholder="新名称">
+                    <button onclick="renameFile('{{.Path}}')">重命名</button>
+                    <button onclick="deleteFile('{{.Path}}')">删除</button>
                 </div>
             </li>
         {{else}}
@@ -197,8 +208,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
             xhr.send(formData);
         });
 
-        function renameFile(oldName) {
-            var newName = document.getElementById('new-name-' + oldName).value;
+        function renameFile(oldPath) {
+            var newName = document.getElementById('new-name-' + oldPath).value;
             if (!newName) {
                 alert('Please enter a new name');
                 return;
@@ -208,7 +219,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({oldName: oldName, newName: newName}),
+                body: JSON.stringify({oldName: oldPath, newName: newName}),
             })
             .then(response => response.json())
             .then(data => {
@@ -262,6 +273,57 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
             .catch((error) => {
                 console.error('Error:', error);
                 alert('An error occurred while toggling protection');
+            });
+        }
+
+        function deleteFile(path) {
+            if (confirm('确定要删除这个文件/文件夹吗？')) {
+                fetch('/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({path: path}),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('删除失败: ' + data.error);
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    alert('删除文件/文件夹时发生错误');
+                });
+            }
+        }
+
+        function createFolder() {
+            var folderName = document.getElementById('folder-name').value;
+            if (!folderName) {
+                alert('请输入文件夹名称');
+                return;
+            }
+            fetch('/create-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({name: folderName}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('创建文件夹失败: ' + data.error);
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                alert('创建文件夹时发生错误');
             });
         }
     </script>
@@ -380,14 +442,78 @@ func toggleProtectionHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "isProtected": currentIsProtected})
 }
 
-func getFileList() ([]string, error) {
-	var files []string
-	err := filepath.Walk(uploadDir, func(path string, info os.FileInfo, err error) error {
+func deleteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var deleteRequest struct {
+		Path string `json:"path"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&deleteRequest)
+	if err != nil {
+		http.Error(w, "Error decoding request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	fullPath := filepath.Join(uploadDir, deleteRequest.Path)
+	err = os.RemoveAll(fullPath)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+func createFolderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var folderRequest struct {
+		Name string `json:"name"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&folderRequest)
+	if err != nil {
+		http.Error(w, "Error decoding request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	folderPath := filepath.Join(uploadDir, folderRequest.Name)
+	err = os.MkdirAll(folderPath, os.ModePerm)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+type FileInfo struct {
+	Name  string
+	Path  string
+	IsDir bool
+}
+
+func getFileList(dir string) ([]FileInfo, error) {
+	var files []FileInfo
+	fullPath := filepath.Join(uploadDir, dir)
+	err := filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
-			files = append(files, info.Name())
+		relPath, _ := filepath.Rel(uploadDir, path)
+		if relPath != "." {
+			files = append(files, FileInfo{
+				Name:  info.Name(),
+				Path:  relPath,
+				IsDir: info.IsDir(),
+			})
 		}
 		return nil
 	})
